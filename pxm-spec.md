@@ -48,6 +48,16 @@ layer_uuid | parent_uuid | index_at_parent | type
 `TEXT` | `TEXT` | `INTEGER` | `TEXT`
 
 
+**type** can be:
+
+- `com.pixelmatorteam.pixelmator.layer.bitmap`
+- `com.pixelmatorteam.pixelmator.layer.vector`
+
+
+
+
+
+
 
 ### layer_info
 layer_uuid | name | value
