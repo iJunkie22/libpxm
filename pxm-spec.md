@@ -2,7 +2,7 @@
 
 
 part | bytes | value | meaning
-- | - | :-----: | -
+---- | ----- | :-----: | -----
 0 | `50584D44 4D455411` | `PXMDMETA` | start of file
 1 | `24090000` | *2340* | length of **P2 + P3**
 2 | `62706C69 737430` | `bplist0` | start of binary plist
@@ -19,7 +19,7 @@ Parts **1**, **3**, and **6** vary. The length of part **1** is always 4 bytes, 
 
 ### document_info
 name | value
-- | -
+----- | ----
 `TEXT` | `BLOB`
 `PTImageIOFormatDocumentLayersLinkingInfoKey` | [bplist]
 `PTImageIOFormatDocumentViewingOptionsInfoKey_PTImageIOPlatformMacOS` | [bplist]
@@ -44,12 +44,12 @@ name | value
 
 ### document_layer
 layer_uuid | parent_uuid | index_at_parent | type
-- | - | - | -
+---- | ----- | ----- | ----
 `TEXT` | `TEXT` | `INTEGER` | `TEXT`
 
 
 
 ### layer_info
 layer_uuid | name | value
-- | - | -
+----- | ----- | -----
 `TEXT` | `TEXT` | `BLOB`
