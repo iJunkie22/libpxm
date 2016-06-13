@@ -20,6 +20,12 @@ class PXMFile(object):
     def __init__(self):
         self.root_plist = {}
         self.layers = []
+        self.layers_dict = {}
+
+    def build_layer_dict(self):
+        for l in self.layers:
+            assert isinstance(l, PXMLayer)
+            self.layers_dict[l.uuid] = l
 
 
 class PXMFileReader(object):
@@ -48,13 +54,25 @@ class PXMFileReader(object):
 
             self.pmx_fo = PXMFile()
             self.pmx_fo.root_plist = d1
-            pxm_fd1.read(43)
-            sql_bytes = pxm_fd1.read()
-            self.sql_db = PXMSqlDB(sql_bytes)
-            for row in self.sql_db.cursor.execute(
-                    "SELECT layer_uuid, parent_uuid, index_at_parent, type from document_layer;"):
-                self.pmx_fo.layers.append(PXMLayer.from_row(*row))
 
+            pxm_fd1.read(43)
+
+            sql_bytes = pxm_fd1.read()
+
+        self.sql_db = PXMSqlDB(sql_bytes)
+
+        for row1 in self.sql_db.cursor.execute(
+            "SELECT layer_uuid, parent_uuid, index_at_parent, type from document_layer;"):
+            self.pmx_fo.layers.append(PXMLayer.from_row(*row1))
+
+        self.pmx_fo.build_layer_dict()
+        for row2 in self.sql_db.cursor.execute("SELECT layer_uuid, name, value from layer_info;"):
+            self.pmx_fo.layers_dict[row2[0]].traits[row2[1]] = row2[2]
+
+        for l in self.pmx_fo.layers:
+            l.parse_trait_plist()
+
+        print("hi")
 
 
 class PXMSqlDB(object):
@@ -90,6 +108,8 @@ class PXMLayer(object):
         self.parent_uuid = None
         self._index_at_parent = -1
         self._type = None
+        self.traits = {}
+        self.trait_plist = None
 
     @classmethod
     def from_row(cls, *cols):
@@ -130,6 +150,10 @@ class PXMLayer(object):
             self._type = value
         else:
             raise ValueError('Not a valid layer type!')
+
+    def parse_trait_plist(self):
+        if 'PTImageIOFormatLayerSpecificDataInfoKey' in self.traits.keys():
+            self.trait_plist = biplist.readPlistFromString(self.traits['PTImageIOFormatLayerSpecificDataInfoKey'])
 
 
 TEST_PXM = "/Users/ethan/Pictures/RyanProjects/ReapersTouch/ReapersTouch 2/0Reaper.pxm"
