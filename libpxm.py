@@ -24,11 +24,23 @@ class NSArchivedPlist(object):
 
     @property
     def top_uid(self):
-        return self.arc_plist['$top']['root']
+        if self.arc_plist.get('$top'):
+            if self.arc_plist['$top'].get('root'):
+                return self.arc_plist['$top']['root']
+            else:
+                return -1
+        else:
+            return None
 
     @property
     def arc_top(self):
-        return self.arc_plist['$objects'][self.top_uid]
+        if self.top_uid:
+            if self.top_uid == -1:
+                return self.arc_plist['$top']
+            else:
+                return self.arc_plist['$objects'][self.top_uid]
+        else:
+            return {}
 
     def q_ns_class(self, class_uid):
         class_str = self.uids[class_uid]
@@ -48,9 +60,50 @@ class NSArchivedPlist(object):
             return lambda d: biplist.Data(d['NS.data'])
 
         elif class_str == 'NSValue':
-            print('Skipped pythonizing for an NSValue.')
             return lambda d, st=('NS.pointval', 'NS.sizeval', 'NS.rectval'): \
                 eval(self.uids[d[st[d['NS.special'] - 1]]].replace('{', '(').replace('}', ')'))
+
+        elif class_str == 'NSColorSpace':
+            print('Skipped pythonizing for an NSColorSpace.')
+            return lambda d: dict(zip(
+                [self.uids[ku] if isinstance(ku, biplist.Uid) else ku for ku in d.keys()],
+                [self.uids[vu] if isinstance(vu, biplist.Uid) else vu for vu in d.values()]
+            ))
+
+        elif class_str == 'NSColor':
+            print('Skipped pythonizing for an NSColor.')
+            return lambda d: dict(zip(
+                [self.uids[ku] if isinstance(ku, biplist.Uid) else ku for ku in d.keys()],
+                [self.uids[vu] if isinstance(vu, biplist.Uid) else vu for vu in d.values()]
+            ))
+
+        elif class_str == 'GCColorStop':
+            print('Skipped pythonizing for a GCColorStop.')
+            return lambda d: dict(zip(
+                [self.uids[ku] if isinstance(ku, biplist.Uid) else ku for ku in d.keys()],
+                [self.uids[vu] if isinstance(vu, biplist.Uid) else vu for vu in d.values()]
+            ))
+
+        elif class_str == 'GCGradient':
+            print('Skipped pythonizing for a GCGradient.')
+            return lambda d: dict(zip(
+                [self.uids[ku] if isinstance(ku, biplist.Uid) else ku for ku in d.keys()],
+                [self.uids[vu] if isinstance(vu, biplist.Uid) else vu for vu in d.values()]
+            ))
+
+        elif class_str == 'PXLayerStyle':
+            print('Skipped pythonizing for a PXLayerStyle.')
+            return lambda d: dict(zip(
+                [self.uids[ku] if isinstance(ku, biplist.Uid) else ku for ku in d.keys()],
+                [self.uids[vu] if isinstance(vu, biplist.Uid) else vu for vu in d.values()]
+            ))
+
+        elif class_str == 'PXSmartShape':
+            print('Skipped pythonizing for a PXSmartShape.')
+            return lambda d: dict(zip(
+                [self.uids[ku] if isinstance(ku, biplist.Uid) else ku for ku in d.keys()],
+                [self.uids[vu] if isinstance(vu, biplist.Uid) else vu for vu in d.values()]
+            ))
 
         else:
             raise ValueError('No known python type for that!')
@@ -59,6 +112,10 @@ class NSArchivedPlist(object):
     def load(cls, plist_in):
         nsap1 = cls()
         nsap1.arc_plist = plist_in
+        if nsap1.top_uid is None:
+            nsap1.real_plist = {}
+            return nsap1
+
         assert nsap1.arc_plist['$archiver'] == 'NSKeyedArchiver'
 
         #  load class names
@@ -116,11 +173,16 @@ class NSArchivedPlist(object):
 
         root = nsap1.arc_top
 
-        assert len(numbered_objects) == 1
-        root2 = dict(zip(
-            [nsap1.uids[ku2] for ku2 in root['NS.keys']],
-            [nsap1.uids[vu2] for vu2 in root['NS.objects']]
-        ))
+        if len(numbered_objects) == 1:
+            root2 = dict(zip(
+                [nsap1.uids[ku2] for ku2 in root['NS.keys']],
+                [nsap1.uids[vu2] for vu2 in root['NS.objects']]
+            ))
+        else:
+            root2 = dict(zip(
+                [nsap1.uids[ku] if isinstance(ku, biplist.Uid) else ku for ku in root.keys()],
+                [nsap1.uids[vu] if isinstance(vu, biplist.Uid) else vu for vu in root.values()]
+            ))
 
         nsap1.real_plist = root2
         return nsap1
@@ -225,6 +287,7 @@ class PXMLayer(object):
         self._type = None
         self.traits = {}
         self.trait_plist = None
+        self.state_plist = None
 
     @classmethod
     def from_row(cls, *cols):
@@ -270,6 +333,9 @@ class PXMLayer(object):
         if 'PTImageIOFormatLayerSpecificDataInfoKey' in self.traits.keys():
             arcd_plist = biplist.readPlistFromString(self.traits['PTImageIOFormatLayerSpecificDataInfoKey'])
             self.trait_plist = NSArchivedPlist.load(arcd_plist).real_plist
+            if '_STATE_DATA_' in self.trait_plist.keys():
+                arplist2 = biplist.readPlistFromString(self.trait_plist['_STATE_DATA_'])
+                self.state_plist = NSArchivedPlist.load(arplist2).real_plist
 
 
 TEST_PXM = "/Users/ethan/Pictures/RyanProjects/ReapersTouch/ReapersTouch 2/0Reaper.pxm"
