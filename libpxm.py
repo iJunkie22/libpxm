@@ -52,12 +52,6 @@ class NSArchivedPlist(object):
             return lambda d, st=('NS.pointval', 'NS.sizeval', 'NS.rectval'): \
                 eval(self.uids[d[st[d['NS.special'] - 1]]].replace('{', '(').replace('}', ')'))
 
-
-            return lambda d: dict(zip(
-                [self.uids[ku] if isinstance(ku, biplist.Uid) else ku for ku in d.keys()],
-                [self.uids[vu] if isinstance(vu, biplist.Uid) else vu for vu in d.values()]
-            ))
-
         else:
             raise ValueError('No known python type for that!')
 
