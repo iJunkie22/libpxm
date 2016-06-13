@@ -16,6 +16,122 @@ PXMLayerTypes = namedtuple('PXMLayerTypes',
                              'com.pixelmatorteam.pixelmator.layer.vector')
 
 
+class NSArchivedPlist(object):
+    def __init__(self):
+        self.arc_plist = {}
+        self.real_plist = {}
+        self.uids = {}
+
+    @property
+    def top_uid(self):
+        return self.arc_plist['$top']['root']
+
+    @property
+    def arc_top(self):
+        return self.arc_plist['$objects'][self.top_uid]
+
+    def q_ns_class(self, class_uid):
+        class_str = self.uids[class_uid]
+        if class_str == 'NSMutableString' or class_str == 'NSString':
+            return lambda d: d['NS.string']
+
+        elif class_str == 'NSMutableDictionary' or class_str == 'NSDictionary':
+            return lambda d: dict(zip(
+                [self.uids[ku] for ku in d['NS.keys']],
+                [self.uids[vu] for vu in d['NS.objects']]
+            ))
+
+        elif class_str == 'NSMutableArray' or class_str == 'NSArray':
+            return lambda d: [self.uids[iu] for iu in d['NS.objects']]
+
+        elif class_str == 'NSMutableData' or class_str == 'NSData':
+            return lambda d: biplist.Data(d['NS.data'])
+
+        elif class_str == 'NSValue':
+            print('Skipped pythonizing for an NSValue.')
+            return lambda d, st=('NS.pointval', 'NS.sizeval', 'NS.rectval'): \
+                eval(self.uids[d[st[d['NS.special'] - 1]]].replace('{', '(').replace('}', ')'))
+
+
+            return lambda d: dict(zip(
+                [self.uids[ku] if isinstance(ku, biplist.Uid) else ku for ku in d.keys()],
+                [self.uids[vu] if isinstance(vu, biplist.Uid) else vu for vu in d.values()]
+            ))
+
+        else:
+            raise ValueError('No known python type for that!')
+
+    @classmethod
+    def load(cls, plist_in):
+        nsap1 = cls()
+        nsap1.arc_plist = plist_in
+        assert nsap1.arc_plist['$archiver'] == 'NSKeyedArchiver'
+
+        #  load class names
+        numbered_objects = list(enumerate(nsap1.arc_plist['$objects']))
+        trash = []
+        for i1, o1 in reversed(numbered_objects):
+            if isinstance(o1, dict) and '$classname' in o1.keys():
+                nsap1.uids[i1] = o1['$classname']
+                trash.append(i1)
+            elif not isinstance(o1, dict):
+                nsap1.uids[i1] = o1
+                trash.append(i1)
+
+        numbered_objects2 = list(numbered_objects)
+        for t in sorted(trash, reverse=True):
+            del numbered_objects[t]
+
+        unfinished = True
+        trash = []
+
+        while unfinished:
+            unfinished = False
+
+            for i2, o2 in reversed(numbered_objects):
+                if i2 != nsap1.top_uid and isinstance(o2, dict) and o2.get('$class'):
+                    if 'NS.keys' not in o2.keys():
+
+                        try:
+                            nsap1.uids[i2] = nsap1.q_ns_class(o2['$class'])(o2)
+                            trash.append(i2)
+
+                        except KeyError:
+                            unfinished = True
+
+            for t in sorted(trash, reverse=True):
+                numbered_objects.remove(numbered_objects2[t])
+
+
+            trash = []
+
+            for i3, o3 in reversed(numbered_objects):
+                if i3 != nsap1.top_uid:
+
+                    try:
+                        nsap1.uids[i3] = nsap1.q_ns_class(o3['$class'])(o3)
+                        trash.append(i3)
+
+                    except KeyError:
+                        unfinished = True
+
+            for t in sorted(trash, reverse=True):
+                numbered_objects.remove(numbered_objects2[t])
+
+            trash = []
+
+        root = nsap1.arc_top
+
+        assert len(numbered_objects) == 1
+        root2 = dict(zip(
+            [nsap1.uids[ku2] for ku2 in root['NS.keys']],
+            [nsap1.uids[vu2] for vu2 in root['NS.objects']]
+        ))
+
+        nsap1.real_plist = root2
+        return nsap1
+
+
 class PXMFile(object):
     def __init__(self):
         self.root_plist = {}
@@ -33,27 +149,32 @@ class PXMFileReader(object):
         with open(pxm_fp1, 'rb') as pxm_fd1:
             assert (struct.unpack('<8s', pxm_fd1.read(8))[0] == 'PXMDMETA'), 'Invalid magic number.'
             h_pl_len = struct.unpack('<i', pxm_fd1.read(4))[0]
-            h_pl = biplist.readPlistFromString(pxm_fd1.read(h_pl_len))
 
-            d1 = dict(zip([(h_pl['$objects'][k]) for k in h_pl['$objects'][1]['NS.keys']],
-                      [(h_pl['$objects'][v]) for v in h_pl['$objects'][1]['NS.objects']]))
+            plist_bytes = pxm_fd1.read(h_pl_len)
 
-            d1['PTImageIOFormatBasicMetaLayerNamesInfoKey'] = \
-                [(h_pl['$objects'][v1].get('NS.string')) for v1 in
-                 d1['PTImageIOFormatBasicMetaLayerNamesInfoKey']['NS.objects']]
+            h_pl = biplist.readPlistFromString(plist_bytes)
 
-            d1['PTImageIOFormatBasicMetaVersionInfoKey'] = \
-                dict(zip([(h_pl['$objects'][k]) for k in d1['PTImageIOFormatBasicMetaVersionInfoKey']['NS.keys']],
-                         [(h_pl['$objects'][v]) for v in d1['PTImageIOFormatBasicMetaVersionInfoKey']['NS.objects']]))
+            ap1 = NSArchivedPlist.load(h_pl)
 
-            d1['PTImageIOFormatBasicMetaVersionInfoKey']['PTImageIOPlatformMacOS'] = \
-                dict(zip([(h_pl['$objects'][k]) for k in
-                          d1['PTImageIOFormatBasicMetaVersionInfoKey']['PTImageIOPlatformMacOS']['NS.keys']],
-                         [(h_pl['$objects'][v]) for v in
-                          d1['PTImageIOFormatBasicMetaVersionInfoKey']['PTImageIOPlatformMacOS']['NS.objects']]))
+            # d1 = dict(zip([(h_pl['$objects'][k]) for k in h_pl['$objects'][1]['NS.keys']],
+            #           [(h_pl['$objects'][v]) for v in h_pl['$objects'][1]['NS.objects']]))
+            #
+            # d1['PTImageIOFormatBasicMetaLayerNamesInfoKey'] = \
+            #     [(h_pl['$objects'][v1].get('NS.string')) for v1 in
+            #      d1['PTImageIOFormatBasicMetaLayerNamesInfoKey']['NS.objects']]
+            #
+            # d1['PTImageIOFormatBasicMetaVersionInfoKey'] = \
+            #     dict(zip([(h_pl['$objects'][k]) for k in d1['PTImageIOFormatBasicMetaVersionInfoKey']['NS.keys']],
+            #              [(h_pl['$objects'][v]) for v in d1['PTImageIOFormatBasicMetaVersionInfoKey']['NS.objects']]))
+            #
+            # d1['PTImageIOFormatBasicMetaVersionInfoKey']['PTImageIOPlatformMacOS'] = \
+            #     dict(zip([(h_pl['$objects'][k]) for k in
+            #               d1['PTImageIOFormatBasicMetaVersionInfoKey']['PTImageIOPlatformMacOS']['NS.keys']],
+            #              [(h_pl['$objects'][v]) for v in
+            #               d1['PTImageIOFormatBasicMetaVersionInfoKey']['PTImageIOPlatformMacOS']['NS.objects']]))
 
             self.pmx_fo = PXMFile()
-            self.pmx_fo.root_plist = d1
+            self.pmx_fo.root_plist = ap1.real_plist
 
             pxm_fd1.read(43)
 
@@ -62,7 +183,7 @@ class PXMFileReader(object):
         self.sql_db = PXMSqlDB(sql_bytes)
 
         for row1 in self.sql_db.cursor.execute(
-            "SELECT layer_uuid, parent_uuid, index_at_parent, type from document_layer;"):
+                "SELECT layer_uuid, parent_uuid, index_at_parent, type from document_layer;"):
             self.pmx_fo.layers.append(PXMLayer.from_row(*row1))
 
         self.pmx_fo.build_layer_dict()
@@ -153,7 +274,8 @@ class PXMLayer(object):
 
     def parse_trait_plist(self):
         if 'PTImageIOFormatLayerSpecificDataInfoKey' in self.traits.keys():
-            self.trait_plist = biplist.readPlistFromString(self.traits['PTImageIOFormatLayerSpecificDataInfoKey'])
+            arcd_plist = biplist.readPlistFromString(self.traits['PTImageIOFormatLayerSpecificDataInfoKey'])
+            self.trait_plist = NSArchivedPlist.load(arcd_plist).real_plist
 
 
 TEST_PXM = "/Users/ethan/Pictures/RyanProjects/ReapersTouch/ReapersTouch 2/0Reaper.pxm"
