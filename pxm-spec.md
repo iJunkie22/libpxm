@@ -63,3 +63,5 @@ layer_uuid | parent_uuid | index_at_parent | type
 layer_uuid | name | value
 ----- | ----- | -----
 `TEXT` | `TEXT` | `BLOB`
+`014794FE-D28F-4EF4-A9D1-4066E1D39A85-3933-000003F7F65ED0D9` | `PTImageIOFormatLayerBitmapDataChangeTimestampInfoKey` | [float (epoch?)]
+
