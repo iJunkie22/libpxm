@@ -16,6 +16,95 @@ PXMLayerTypes = namedtuple('PXMLayerTypes',
                              'com.pixelmatorteam.pixelmator.layer.vector')
 
 
+class NSColor(object):
+    def __init__(self):
+        self.NSColorSpace = NotImplemented
+        self.NSComponents = NotImplemented
+        self.NSRGB = NotImplemented
+
+    @classmethod
+    def from_dict(cls, d1):
+        nsc1 = cls()
+        # if isinstance(d1['NSComponents'], biplist.Uid):
+        #     raise KeyError
+        # if isinstance(d1['NSColorSpace'], biplist.Uid):
+        #     raise KeyError
+        if not d1.get('NSColorSpace'):
+            pass
+
+        if d1.get('NSComponents'):
+            nsc1.NSComponents = NSComponents(d1['NSComponents'])
+
+        nsc1.NSColorSpace = d1['NSColorSpace']
+        if d1.get('NSRGB'):
+            nsc1.NSRGB = NSRGB(d1['NSRGB'])
+
+        return nsc1
+
+
+class NSRGB(biplist.Data):
+    @property
+    def r(self):
+        return float(self.split()[0])
+
+    @property
+    def g(self):
+        return float(self.split()[1])
+
+    @property
+    def b(self):
+        return float(self.split()[2])
+
+    @property
+    def a(self):
+        return float(self.split()[3])
+
+
+class NSComponents(biplist.Data):
+    @property
+    def is_greyscale(self):
+        return len(self.split()) < 3
+
+    @property
+    def has_alpha(self):
+        return (len(self.split()) % 2) == 0
+
+    @property
+    def r(self):
+        pieces = self.split()
+        if self.is_greyscale:
+            return pieces[0]
+        else:
+            return pieces[0]
+
+    @property
+    def g(self):
+        pieces = self.split()
+        if self.is_greyscale:
+            return pieces[0]
+        else:
+            return pieces[1]
+
+    @property
+    def b(self):
+        pieces = self.split()
+        if self.is_greyscale:
+            return pieces[0]
+        else:
+            return pieces[2]
+
+    @property
+    def a(self):
+        pieces = self.split()
+        if self.has_alpha:
+            if self.is_greyscale:
+                return pieces[1]
+            else:
+                return pieces[3]
+        else:
+            raise AttributeError('alpha not included')
+
+
 class NSArchivedPlist(object):
     def __init__(self):
         self.arc_plist = {}
@@ -72,10 +161,11 @@ class NSArchivedPlist(object):
 
         elif class_str == 'NSColor':
             print('Skipped pythonizing for an NSColor.')
-            return lambda d: dict(zip(
-                [self.uids[ku] if isinstance(ku, biplist.Uid) else ku for ku in d.keys()],
-                [self.uids[vu] if isinstance(vu, biplist.Uid) else vu for vu in d.values()]
-            ))
+            return lambda d: NSColor.from_dict(d)
+            # return lambda d: dict(zip(
+            #     [self.uids[ku] if isinstance(ku, biplist.Uid) else ku for ku in d.keys()],
+            #     [self.uids[vu] if isinstance(vu, biplist.Uid) else vu for vu in d.values()]
+            # ))
 
         elif class_str == 'GCColorStop':
             print('Skipped pythonizing for a GCColorStop.')
